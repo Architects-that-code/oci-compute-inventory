@@ -307,18 +307,29 @@ func envInt(name string, fallback int) (int, error) {
 }
 func run() error {
 	once := flag.Bool("once", false, "Run a read-only scan, print metrics, and exit")
-	mode := flag.String("auth", "workload", "Authentication: workload, environment (operator validation only)")
+	mode := flag.String("auth", "workload", "Authentication: workload (OKE), instance (OCI Compute), resource (Container Instances), config (local --once only)")
+	configFile := flag.String("config-file", "", "Explicit local OCI configuration file; requires --auth config --once")
+	profile := flag.String("profile", "DEFAULT", "OCI configuration file profile (local validation only)")
 	flag.Parse()
-	if *mode != "workload" && *mode != "environment" {
-		return errors.New("auth must be workload or environment")
+	options := authOptions{mode: *mode, configFile: *configFile, profile: *profile, once: *once}
+	if err := options.validate(); err != nil {
+		return err
 	}
 	tenancy := os.Getenv("OCI_TENANCY_OCID")
-	if tenancy == "" {
-		tenancy = os.Getenv("TF_VAR_tenancy_ocid")
+	if *mode == "config" {
+		provider, err := options.provider()
+		if err != nil {
+			return err
+		}
+		tenancy, err = provider.TenancyOCID()
+		if err != nil {
+			return err
+		}
 	}
 	if tenancy == "" {
 		return errors.New("OCI_TENANCY_OCID is required")
 	}
+
 	interval, e := envInt("POLL_INTERVAL_SECONDS", 300)
 	if e != nil {
 		return e
@@ -335,6 +346,16 @@ func run() error {
 		return errors.New("poll interval must be >=30, workers 1..16, and collection timeout positive")
 	}
 	region := os.Getenv("OCI_RESOURCE_PRINCIPAL_REGION")
+	if *mode == "config" {
+		provider, err := options.provider()
+		if err != nil {
+			return err
+		}
+		region, err = provider.Region()
+		if err != nil {
+			return err
+		}
+	}
 	if region == "" {
 		region = "us-ashburn-1"
 	}
@@ -347,7 +368,7 @@ func run() error {
 		return collect(c, api, tenancy, workers)
 	}
 	if *once {
-		api, err := newOCIBackend(*mode, region, tenancy)
+		api, err := newOCIBackend(options, region, tenancy)
 		if err != nil {
 			return err
 		}
@@ -365,7 +386,7 @@ func run() error {
 			started := time.Now()
 			var err error
 			if api == nil {
-				api, err = newOCIBackend(*mode, region, tenancy)
+				api, err = newOCIBackend(options, region, tenancy)
 			}
 			var s snapshot
 			if err != nil {

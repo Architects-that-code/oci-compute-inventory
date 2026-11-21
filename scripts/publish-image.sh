@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run from this independent project, never from Terraform.
+# Build and publish this collector project.
 set -euo pipefail
 umask 077
 : "${IMAGE:?Set IMAGE to the full GHCR repository and release tag}"

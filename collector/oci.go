@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"sync"
 	"time"
 
@@ -23,21 +22,50 @@ type ociBackend struct {
 	tenancy  string
 }
 
-func newOCIBackend(mode, region, tenancy string) (backend, error) {
-	var provider common.ConfigurationProvider
-	var err error
-	if mode == "environment" {
-		key, e := os.ReadFile(os.Getenv("TF_VAR_private_key_path"))
-		if e != nil {
-			return nil, e
+type authOptions struct {
+	mode, configFile, profile string
+	once                      bool
+}
+
+func (o authOptions) validate() error {
+	switch o.mode {
+	case "workload", "instance", "resource":
+		if o.configFile != "" || o.profile != "DEFAULT" {
+			return fmt.Errorf("config-file and profile require auth=config")
 		}
-		provider = common.NewRawConfigurationProvider(tenancy, os.Getenv("TF_VAR_user_ocid"), region, os.Getenv("TF_VAR_api_fingerprint"), string(key), nil)
-	} else {
-		provider, err = auth.OkeWorkloadIdentityConfigurationProvider()
-		if err != nil {
-			return nil, err
+	case "config":
+		if !o.once || o.configFile == "" {
+			return fmt.Errorf("auth=config requires --once and an explicit --config-file for local validation")
 		}
+	default:
+		return fmt.Errorf("auth must be workload, instance, resource, or config")
 	}
+	return nil
+}
+
+func (o authOptions) provider() (common.ConfigurationProvider, error) {
+	if err := o.validate(); err != nil {
+		return nil, err
+	}
+	switch o.mode {
+	case "workload":
+		return auth.OkeWorkloadIdentityConfigurationProvider()
+	case "instance":
+		return auth.InstancePrincipalConfigurationProvider()
+	case "resource":
+		return auth.ResourcePrincipalConfigurationProvider()
+	case "config":
+		return common.ConfigurationProviderFromFileWithProfile(o.configFile, o.profile, "")
+	}
+	return nil, fmt.Errorf("unsupported auth mode")
+}
+
+func newOCIBackend(options authOptions, region, tenancy string) (backend, error) {
+	provider, err := options.provider()
+	if err != nil {
+		return nil, err
+	}
+
 	client, err := identity.NewIdentityClientWithConfigurationProvider(provider)
 	if err != nil {
 		return nil, err

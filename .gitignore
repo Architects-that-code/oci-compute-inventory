@@ -1,3 +1,10 @@
 /dist/
 .env
 *.prom
+
+# Local OCI credentials and keys must never be committed.
+*.properties
+*.pem
+*.key
+.oci/
+oci-config*

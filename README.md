@@ -3,15 +3,12 @@
 Standalone Go collector for running Compute instance counts across every READY
 subscribed OCI region and ACTIVE compartment, including the tenancy root.
 `dashboards/oci-global-compute-inventory.json` is a portable copy of the Grafana
-dashboard with region and compartment filters. Its UID and Prometheus metric
-contract match the dashboard deployed by span_the_globe 003. When changing it,
-copy the reviewed JSON into that deployment repository's managed dashboard path.
+dashboard with region and compartment filters.
 
 ## Build and test
 
 Prerequisites: Go 1.26 or newer (race tests require a working C compiler), Python 3
-for dashboard validation, and Docker with Buildx for image builds. No Terraform
-checkout or credentials are needed for tests or builds.
+for dashboard validation, and Docker with Buildx for image builds. No cloud credentials are needed for tests or builds.
 
 ```bash
 make test
@@ -52,11 +49,9 @@ Publishing runs all tests first, builds Linux AMD64 and ARM64, and pushes to GHC
 A temporary Docker configuration holds authentication and is removed on exit.
 Existing release tags are reused: always choose a new VERSION for changed source.
 Keep tags immutable, or deploy the published manifest digest. Override IMAGE for
-an alternative repository under ghcr.io. Nothing builds or publishes during a
-Terraform apply, and OCI CLI credentials are not needed to publish.
+an alternative repository under ghcr.io. OCI CLI credentials are not needed to publish.
 
-New GHCR packages are private by default. Before deploying with the default 003
-chart, set the package's visibility to **public** in GitHub package settings so
+New GHCR packages are private by default. Before deploying, set the package's visibility to **public** in GitHub package settings so
 cluster nodes can pull anonymously. OCI node dynamic groups do not grant access
 to private GHCR images. See [GitHub Container Registry documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
 
@@ -68,7 +63,8 @@ scoped to that account, namespace, and cluster: `read instances`, `inspect
 compartments`, and `inspect tenancies`. No operator credentials belong in the pod.
 The default deployment pulls the public GHCR package anonymously. See [OKE workload identity](https://docs.oracle.com/en-us/iaas/Content/ContEng/Tasks/contenggrantingworkloadaccesstoresources.htm).
 
-Required environment: `OCI_TENANCY_OCID`. Optional settings:
+Required environment: `OCI_TENANCY_OCID` and, in workload mode,
+`OCI_RESOURCE_PRINCIPAL_VERSION=2.2` (required by the OCI Go SDK). Optional settings:
 `OCI_RESOURCE_PRINCIPAL_REGION` (us-ashburn-1), `POLL_INTERVAL_SECONDS` (300),
 `COLLECTOR_WORKERS` (4), and `COLLECTION_TIMEOUT_SECONDS` (600).
 The HTTP listener exposes `/healthz` and `/metrics` on port 9108. Scans run at
@@ -81,15 +77,47 @@ Counts include VM and bare-metal instances independently of OKE membership or
 monitoring-agent state. OCI global inventory is observed over the scan duration,
 not a transactional snapshot.
 
-For read-only local operator validation, `dist/collector --once --auth environment`
-accepts `TF_VAR_tenancy_ocid`, `TF_VAR_user_ocid`, `TF_VAR_api_fingerprint`, and
-`TF_VAR_private_key_path`. This optional compatibility mode does not require a
-Terraform project and does not validate the pod's workload IAM. After deployment,
-verify `oci_compute_inventory_collection_success == 1` and snapshot freshness.
+For local validation only, supply an explicit OCI properties file outside this
+checkout using the standard OCI SDK configuration format:
 
-## Deploy with span_the_globe
+```ini
+[DEFAULT]
+tenancy=ocid1.tenancy.oc1..REPLACE
+user=ocid1.user.oc1..REPLACE
+fingerprint=REPLACE
+key_file=/absolute/path/outside/repository/api-key.pem
+region=us-ashburn-1
+```
 
-003 defaults to the v0.1.0 GHCR image above. Set `compute_inventory_image` to a new
-published image tag or digest when releasing an update, then
-apply 003. Its Helm chart starts `/collector` directly. The infrastructure project
-continues to manage IAM, Helm, scraping, and Grafana provisioning.
+```bash
+dist/collector --once --auth config --config-file /secure/path/oci.properties
+# Add --profile NAME for a named profile.
+```
+
+The tenancy comes from that file in config mode. Config authentication is rejected
+for the long-running service. There is no automatic credentials-file discovery or
+Terraform-variable authentication. Keep the file and private key outside the
+checkout, restrict their filesystem permissions, and never commit, bake into an
+image, or deploy them. Git ignores `*.properties`, `*.pem`, `*.key`, `.oci/`, and
+`oci-config*`; the Docker build context allows only Go source and module files.
+
+## Container deployment
+
+Run the published image with port 9108 exposed and `OCI_TENANCY_OCID` set.
+Select identity explicitly; there is no fallback to local credentials:
+
+| Runtime | Arguments | Identity setup |
+| --- | --- | --- |
+| OKE pod | `--auth workload` (default) | Workload identity and IAM policy scoped to the service account, namespace, and cluster |
+| Container on OCI Compute | `--auth instance` | Host instance principal, dynamic group and IAM policies; container must reach instance metadata |
+| OCI Container Instances | `--auth resource` | Enable resource principal access for the container; configure dynamic group and IAM policies |
+
+A host outside OCI needs an OCI runtime identity to run the deployed service;
+file credentials are reserved for local one-shot validation. Do not mount local
+properties files or API keys into deployed containers. Grant the chosen principal
+`read instances`, `inspect compartments`, and `inspect tenancies` for the intended
+tenancy scope. Configure Prometheus to scrape `/metrics` on port 9108. Verify
+`oci_compute_inventory_collection_success == 1` and snapshot freshness.
+
+See [OCI SDK authentication](https://docs.oracle.com/en-us/iaas/Content/API/Concepts/sdk_authentication_methods.htm)
+and [Container Instances resource principal access](https://docs.oracle.com/en-us/iaas/tools/go/latest/containerinstances/index.html).

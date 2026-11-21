@@ -1,0 +1,37 @@
+name: Publish container
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Immutable release tag (for example v0.1.0)
+        required: true
+        default: v0.1.0
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.1'
+          cache-dependency-path: collector/go.sum
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Test and publish both architectures
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          [[ "$RELEASE_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][a-zA-Z0-9.-]+)?$ ]] || { echo 'Use a release tag such as v0.1.0'; exit 1; }
+          make publish VERSION="$RELEASE_VERSION"

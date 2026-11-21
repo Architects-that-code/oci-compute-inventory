@@ -16,7 +16,7 @@ checkout or credentials are needed for tests or builds.
 ```bash
 make test
 make build                           # dist/collector, native static binary
-make image IMAGE=iad.ocir.io/NAMESPACE/span-the-globe/oci-compute-inventory:v0.1.0
+make image VERSION=v0.1.0
 ```
 
 `make image` builds Linux AMD64 and ARM64 into `dist/collector.oci.tar`, without
@@ -26,22 +26,39 @@ scratch runtime contains only `/collector` and CA certificates, running as UID
 
 ## Publish a release
 
-Configure the OCI CLI with your normal API-key profile or OCI_CLI_* environment
-variables. Set `OCI_CLI_REGION=us-ashburn-1` for IAD. The operator needs repository
-push permission. Create a private OCIR repository before publishing, either through
-your infrastructure project or the OCI CLI:
+The default image is
+`ghcr.io/architects-that-code/oci-compute-inventory:v0.1.0`, associated with the
+[GitHub repository](https://github.com/Architects-that-code/oci-compute-inventory)
+through the image's `org.opencontainers.image.source` label.
+
+Authenticate with GitHub CLI (`gh auth login`) using a token that has
+`write:packages`, or set `GHCR_TOKEN` (a classic PAT with `write:packages`) and
+`GHCR_USERNAME` to the token owner's login. GitHub Actions can instead supply
+`GITHUB_TOKEN` with `packages: write` and `GITHUB_ACTOR`. Do not put tokens in
+Makefile arguments or source control.
+
+Recommended: run **Actions → Publish container → Run workflow** and enter the
+release version. The workflow tests and publishes both architectures with its
+repository-scoped `GITHUB_TOKEN` and `packages: write`; no personal token is needed.
+Repository visibility does not grant package push permission. For local publishing
+with an existing GitHub CLI login, first run
+`gh auth refresh -h github.com -s write:packages` to authorize that scope.
 
 ```bash
-oci artifacts container repository create --compartment-id COMPARTMENT_OCID \
-  --display-name span-the-globe/oci-compute-inventory --is-public false
-make publish IMAGE=iad.ocir.io/NAMESPACE/span-the-globe/oci-compute-inventory:v0.1.0
+make publish VERSION=v0.1.0
 ```
 
-Publishing runs all tests first, builds both architectures, and pushes the image.
-A temporary Docker configuration holds a short-lived OCIR bearer token and is
-removed on exit. Existing release tags are reused: always choose a new tag for
-changed source. Keep tags immutable, or deploy the published manifest digest.
-Nothing builds or publishes during a Terraform apply.
+Publishing runs all tests first, builds Linux AMD64 and ARM64, and pushes to GHCR.
+A temporary Docker configuration holds authentication and is removed on exit.
+Existing release tags are reused: always choose a new VERSION for changed source.
+Keep tags immutable, or deploy the published manifest digest. Override IMAGE for
+an alternative repository under ghcr.io. Nothing builds or publishes during a
+Terraform apply, and OCI CLI credentials are not needed to publish.
+
+New GHCR packages are private by default. Before deploying with the default 003
+chart, set the package's visibility to **public** in GitHub package settings so
+cluster nodes can pull anonymously. OCI node dynamic groups do not grant access
+to private GHCR images. See [GitHub Container Registry documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
 
 ## Runtime and authentication
 
@@ -49,8 +66,7 @@ The default authentication is OKE workload identity, using a shared OCI Go SDK
 provider. Deploy as service account `monitoring/oci-compute-inventory` with IAM
 scoped to that account, namespace, and cluster: `read instances`, `inspect
 compartments`, and `inspect tenancies`. No operator credentials belong in the pod.
-Private image pulls need the node's OCIR credential provider and repository read
-permission. See [OKE workload identity](https://docs.oracle.com/en-us/iaas/Content/ContEng/Tasks/contenggrantingworkloadaccesstoresources.htm).
+The default deployment pulls the public GHCR package anonymously. See [OKE workload identity](https://docs.oracle.com/en-us/iaas/Content/ContEng/Tasks/contenggrantingworkloadaccesstoresources.htm).
 
 Required environment: `OCI_TENANCY_OCID`. Optional settings:
 `OCI_RESOURCE_PRINCIPAL_REGION` (us-ashburn-1), `POLL_INTERVAL_SECONDS` (300),
@@ -73,6 +89,7 @@ verify `oci_compute_inventory_collection_success == 1` and snapshot freshness.
 
 ## Deploy with span_the_globe
 
-Set `compute_inventory_image` in 003 to the published image tag or digest, then
+003 defaults to the v0.1.0 GHCR image above. Set `compute_inventory_image` to a new
+published image tag or digest when releasing an update, then
 apply 003. Its Helm chart starts `/collector` directly. The infrastructure project
-continues to manage IAM, OCIR infrastructure, scraping, and Grafana provisioning.
+continues to manage IAM, Helm, scraping, and Grafana provisioning.

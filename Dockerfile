@@ -8,6 +8,8 @@ ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /collector .
 
 FROM scratch
+LABEL org.opencontainers.image.source="https://github.com/Architects-that-code/oci-compute-inventory"
+LABEL org.opencontainers.image.description="Global OCI running Compute inventory for Prometheus"
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /collector /collector
 USER 65532:65532

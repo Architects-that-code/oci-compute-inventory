@@ -1,0 +1,6 @@
+**
+!Dockerfile
+!collector/
+!collector/*.go
+!collector/go.mod
+!collector/go.sum

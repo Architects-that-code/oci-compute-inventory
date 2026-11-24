@@ -51,7 +51,7 @@ func TestOperationsKeepInventoryAndDistinguishMissingTelemetryFromQueryFailure(t
 				if loc.Region == "lhr" {
 					return nil, errors.New("permission denied")
 				}
-				return map[string]metricSample{"agent-vm": {Value: 0}}, nil
+				return map[string]metricSample{"agent-vm": {At: time.Unix(1795550000, 0), Value: 42.5}}, nil
 			case "vm_accessibility":
 				return map[string]metricSample{
 					"app-vm": {Value: 1}, "inactive": {Value: 1}, "database": {Value: 1},
@@ -93,6 +93,14 @@ func TestOperationsKeepInventoryAndDistinguishMissingTelemetryFromQueryFailure(t
 		if !strings.Contains(output, want) {
 			t.Errorf("missing %q", want)
 		}
+	}
+	if strings.Count(output, "oci_compute_inventory_instance_info{") != 3 {
+		t.Fatal("roster must include every running instance even when a telemetry query fails")
+	}
+	if strings.Count(output, "oci_compute_inventory_instance_cpu_utilization_percent{") != 1 ||
+		!strings.Contains(output, `environment=""} 42.5`) ||
+		!strings.Contains(output, `environment=""} 1.79555e+09`) {
+		t.Fatal("CPU values and source timestamps must be emitted only for observed samples")
 	}
 	for _, line := range strings.Split(output, "\n") {
 		if strings.Contains(line, `instance_id="inactive"`) || strings.Contains(line, "partial-page") || strings.Contains(line, "irrelevant") {

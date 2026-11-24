@@ -226,6 +226,14 @@ func collect(ctx context.Context, api backend, tenancy string, workers int) (s s
 func escape(v string) string {
 	return strings.NewReplacer("\\", "\\\\", "\n", "\\n", "\"", "\\\"").Replace(v)
 }
+func instanceMetricLabels(s snapshot, in runningInstance) string {
+	loc := in.Location
+	return fmt.Sprintf(`region="%s",compartment_id="%s",compartment_path="%s",instance_id="%s",instance_name="%s",shape="%s",availability_domain="%s",fault_domain="%s",owner="%s",environment="%s"`,
+		escape(loc.Region), escape(loc.Compartment), escape(s.Compartments[loc.Compartment].Path),
+		escape(in.ID), escape(in.Name), escape(in.Shape), escape(in.AvailabilityDomain),
+		escape(in.FaultDomain), escape(in.Owner), escape(in.Environment))
+}
+
 func render(s snapshot, interval time.Duration) string {
 	var b strings.Builder
 	gauge := func(name, help string) { fmt.Fprintf(&b, "# HELP %s %s\n# TYPE %s gauge\n", name, help, name) }
@@ -265,6 +273,16 @@ func render(s snapshot, interval time.Duration) string {
 		for _, id := range ids {
 			c := s.Compartments[id]
 			fmt.Fprintf(&b, "oci_compute_compartment_info{compartment_id=\"%s\",compartment_name=\"%s\",compartment_path=\"%s\"} 1\n", escape(id), escape(c.Name), escape(c.Path))
+		}
+		gauge("oci_compute_inventory_instance_info", "One per RUNNING instance from a complete inventory snapshot, independent of telemetry availability.")
+		instanceIDs := make([]string, 0, len(s.Instances))
+		for id := range s.Instances {
+			instanceIDs = append(instanceIDs, id)
+		}
+		sort.Strings(instanceIDs)
+		for _, id := range instanceIDs {
+			in := s.Instances[id]
+			fmt.Fprintf(&b, "oci_compute_inventory_instance_info{%s} 1\n", instanceMetricLabels(s, in))
 		}
 		gauge("oci_compute_running_instances", "Compute API RUNNING instances, including VM and bare metal.")
 		for _, r := range s.Regions {

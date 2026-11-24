@@ -2,8 +2,8 @@
   "uid": "oci-compute-instance-operations",
   "title": "OCI / Compute Instance Operations",
   "schemaVersion": 41,
-  "version": 1,
-  "description": "Health issues, active maintenance, and missing Compute Agent CPU telemetry for running OCI Compute instances.",
+  "version": 2,
+  "description": "Running OCI Compute fleet with per-instance health, CPU telemetry, maintenance, source visibility and alert rule examples. Unknown metrics remain explicit.",
   "tags": [
     "oci",
     "compute",
@@ -59,6 +59,84 @@
           "selected": true
         },
         "options": []
+      },
+      {
+        "name": "owner",
+        "label": "Owner",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": {
+          "query": "query_result(max by (owner) (oci_compute_inventory_instance_info{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\"} or oci_compute_inventory_instance_agent_cpu_samples_present{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\"}))",
+          "refId": "StandardVariableQuery"
+        },
+        "definition": "query_result(max by (owner) (oci_compute_inventory_instance_info{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\"} or oci_compute_inventory_instance_agent_cpu_samples_present{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\"}))",
+        "refresh": 2,
+        "sort": 1,
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all",
+          "selected": true
+        },
+        "options": [],
+        "regex": "/owner=\"([^\"]*)\"/"
+      },
+      {
+        "name": "environment",
+        "label": "Environment",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": {
+          "query": "query_result(max by (environment) (oci_compute_inventory_instance_info{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\"} or oci_compute_inventory_instance_agent_cpu_samples_present{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\"}))",
+          "refId": "StandardVariableQuery"
+        },
+        "definition": "query_result(max by (environment) (oci_compute_inventory_instance_info{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\"} or oci_compute_inventory_instance_agent_cpu_samples_present{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\"}))",
+        "refresh": 2,
+        "sort": 1,
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all",
+          "selected": true
+        },
+        "options": [],
+        "regex": "/environment=\"([^\"]*)\"/"
+      },
+      {
+        "name": "compute_instance",
+        "label": "Instance",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": {
+          "query": "query_result(max by (instance_id) (oci_compute_inventory_instance_info{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\"} or oci_compute_inventory_instance_agent_cpu_samples_present{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\"}))",
+          "refId": "StandardVariableQuery"
+        },
+        "definition": "query_result(max by (instance_id) (oci_compute_inventory_instance_info{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\"} or oci_compute_inventory_instance_agent_cpu_samples_present{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\"}))",
+        "refresh": 2,
+        "sort": 1,
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all",
+          "selected": true
+        },
+        "options": [],
+        "regex": "/instance_id=\"([^\"]*)\"/"
       }
     ]
   },
@@ -71,11 +149,11 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Fleet-wide collection status. Partial includes a failed inventory scan or an unsuccessful monitoring query. Check snapshot age and the failed query table.",
+      "description": "Fleet-wide collection state. Complete means source queries succeeded; it does not guarantee every OCI health signal exists for every instance.",
       "gridPos": {
         "x": 0,
         "y": 0,
-        "w": 12,
+        "w": 6,
         "h": 4
       },
       "targets": [
@@ -142,9 +220,9 @@
       },
       "description": "Instance rows are shown only for a successful inventory snapshot younger than three polling intervals.",
       "gridPos": {
-        "x": 12,
+        "x": 6,
         "y": 0,
-        "w": 12,
+        "w": 6,
         "h": 4
       },
       "targets": [
@@ -182,17 +260,779 @@
       }
     },
     {
-      "id": 3,
-      "title": "Instance health issues",
+      "id": 10,
+      "title": "Running instances in selected scope",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Every RUNNING instance matching the region, compartment, owner, environment and instance filters. Unknown telemetry remains in the roster.",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(((max by (job, instance, region, compartment_id, compartment_path, instance_id, instance_name, shape, owner, environment, availability_domain, fault_domain) ((oci_compute_inventory_instance_info{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"} or on (job, instance, instance_id) oci_compute_inventory_instance_agent_cpu_samples_present{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"} or on (job, instance, instance_id) max without (signal) (oci_compute_inventory_instance_health{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"})) >= bool 0)) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds)))) or (0 * max(((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds))))",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable",
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 11,
+      "title": "CPU telemetry present",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Instances with a Compute Agent CPU sample in the last 15 minutes.",
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count(((oci_compute_inventory_instance_agent_cpu_samples_present{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"}) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds))) == 1) or (0 * max((((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds)) and on (job, instance) (oci_compute_inventory_instance_monitoring_collection_success == 1))))",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable",
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 12,
+      "title": "Instances with health issues",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Unique instances with at least one positive OCI health reading.",
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count(((max by (job, instance, region, compartment_id, compartment_path, instance_id, instance_name, shape, owner, environment, availability_domain, fault_domain) (oci_compute_inventory_instance_health{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"})) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds))) > 0) or (0 * max((((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds)) and on (job, instance) (oci_compute_inventory_instance_monitoring_collection_success == 1))))",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable",
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 13,
+      "title": "Instances with maintenance",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "",
+      "gridPos": {
+        "x": 6,
+        "y": 4,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count(((count by (job, instance, instance_id) (oci_compute_inventory_instance_maintenance_event{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"})) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds)))) or (0 * max((((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds)) and on (job, instance) (oci_compute_inventory_instance_monitoring_collection_success == 1))))",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable",
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 14,
+      "title": "Instances missing CPU telemetry",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "",
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count(((oci_compute_inventory_instance_agent_cpu_samples_present{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"}) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds))) == 0) or (0 * max((((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds)) and on (job, instance) (oci_compute_inventory_instance_monitoring_collection_success == 1))))",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable",
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 15,
+      "title": "Failed source queries",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Region/compartment source queries. Region and compartment filters apply; ownership and instance filters do not apply to shared source queries.",
+      "gridPos": {
+        "x": 18,
+        "y": 4,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count(((oci_compute_inventory_instance_signal_query_success{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\"} == 0) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds)))) or (0 * max((((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds)) and on (job, instance) (oci_compute_inventory_instance_monitoring_collection_success == 1))))",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable",
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 20,
+      "title": "All running instances \u2014 health, telemetry and maintenance",
       "type": "table",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Latest positive OCI health readings. Use the collector status and query failures to assess visibility.",
+      "description": "One row per running instance. No issue reported means the available readings are zero, not that every possible signal is available. Unknown and Query failed are visibility gaps. Use column filters to investigate and copy an instance OCID for alert rules.",
       "gridPos": {
         "x": 0,
-        "y": 4,
+        "y": 8,
+        "w": 24,
+        "h": 13
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(((max by (job, instance, region, compartment_id, compartment_path, instance_id, instance_name, shape, owner, environment, availability_domain, fault_domain) ((oci_compute_inventory_instance_info{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"} or on (job, instance, instance_id) oci_compute_inventory_instance_agent_cpu_samples_present{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"} or on (job, instance, instance_id) max without (signal) (oci_compute_inventory_instance_health{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"})) >= bool 0)) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds)))) * on (job, instance, instance_id) group_left (health_status) (max by (job, instance, instance_id, health_status) (label_replace((((max by (job, instance, region, compartment_id, compartment_path, instance_id, instance_name, shape, owner, environment, availability_domain, fault_domain) (oci_compute_inventory_instance_health{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"})) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds))) > 0), \"health_status\", \"Issue reported\", \"\", \"\") >= bool 0) or on (job, instance, instance_id) max by (job, instance, instance_id, health_status) (label_replace(((((max by (job, instance, region, compartment_id, compartment_path, instance_id, instance_name, shape, owner, environment, availability_domain, fault_domain) ((oci_compute_inventory_instance_info{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"} or on (job, instance, instance_id) oci_compute_inventory_instance_agent_cpu_samples_present{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"} or on (job, instance, instance_id) max without (signal) (oci_compute_inventory_instance_health{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"})) >= bool 0)) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds)))) and on (job, instance, region, compartment_id) (((oci_compute_inventory_instance_signal_query_success{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",signal!=\"agent_cpu\",signal!=\"maintenance\"} == 0) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds))))), \"health_status\", \"Query failed\", \"\", \"\") >= bool 0) or on (job, instance, instance_id) max by (job, instance, instance_id, health_status) (label_replace((((max by (job, instance, region, compartment_id, compartment_path, instance_id, instance_name, shape, owner, environment, availability_domain, fault_domain) (oci_compute_inventory_instance_health{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"})) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds))) == 0), \"health_status\", \"No issue reported\", \"\", \"\") >= bool 0) or on (job, instance, instance_id) max by (job, instance, instance_id, health_status) (label_replace((((max by (job, instance, region, compartment_id, compartment_path, instance_id, instance_name, shape, owner, environment, availability_domain, fault_domain) ((oci_compute_inventory_instance_info{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"} or on (job, instance, instance_id) oci_compute_inventory_instance_agent_cpu_samples_present{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"} or on (job, instance, instance_id) max without (signal) (oci_compute_inventory_instance_health{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"})) >= bool 0)) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds)))), \"health_status\", \"No health samples\", \"\", \"\") >= bool 0)) * on (job, instance, instance_id) group_left (cpu_telemetry) (max by (job, instance, instance_id, cpu_telemetry) (label_replace((((oci_compute_inventory_instance_agent_cpu_samples_present{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"}) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds))) == 1), \"cpu_telemetry\", \"Present\", \"\", \"\") >= bool 0) or on (job, instance, instance_id) max by (job, instance, instance_id, cpu_telemetry) (label_replace((((oci_compute_inventory_instance_agent_cpu_samples_present{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"}) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds))) == 0), \"cpu_telemetry\", \"Missing\", \"\", \"\") >= bool 0) or on (job, instance, instance_id) max by (job, instance, instance_id, cpu_telemetry) (label_replace((((max by (job, instance, region, compartment_id, compartment_path, instance_id, instance_name, shape, owner, environment, availability_domain, fault_domain) ((oci_compute_inventory_instance_info{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"} or on (job, instance, instance_id) oci_compute_inventory_instance_agent_cpu_samples_present{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"} or on (job, instance, instance_id) max without (signal) (oci_compute_inventory_instance_health{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"})) >= bool 0)) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds)))), \"cpu_telemetry\", \"Unknown\", \"\", \"\") >= bool 0)) * on (job, instance, instance_id) group_left (maintenance_status) (max by (job, instance, instance_id, maintenance_status) (label_replace((((count by (job, instance, instance_id) (oci_compute_inventory_instance_maintenance_event{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"})) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds)))), \"maintenance_status\", \"Active event\", \"\", \"\") >= bool 0) or on (job, instance, instance_id) max by (job, instance, instance_id, maintenance_status) (label_replace(((((max by (job, instance, region, compartment_id, compartment_path, instance_id, instance_name, shape, owner, environment, availability_domain, fault_domain) ((oci_compute_inventory_instance_info{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"} or on (job, instance, instance_id) oci_compute_inventory_instance_agent_cpu_samples_present{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"} or on (job, instance, instance_id) max without (signal) (oci_compute_inventory_instance_health{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"})) >= bool 0)) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds)))) and on (job, instance, region, compartment_id) (((oci_compute_inventory_instance_signal_query_success{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",signal=\"maintenance\"} == 1) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds))))), \"maintenance_status\", \"No active events\", \"\", \"\") >= bool 0) or on (job, instance, instance_id) max by (job, instance, instance_id, maintenance_status) (label_replace((((max by (job, instance, region, compartment_id, compartment_path, instance_id, instance_name, shape, owner, environment, availability_domain, fault_domain) ((oci_compute_inventory_instance_info{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"} or on (job, instance, instance_id) oci_compute_inventory_instance_agent_cpu_samples_present{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"} or on (job, instance, instance_id) max without (signal) (oci_compute_inventory_instance_health{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"})) >= bool 0)) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds)))), \"maintenance_status\", \"Unknown\", \"\", \"\") >= bool 0))",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unknown",
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Health"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "Issue reported": {
+                        "text": "Issue reported",
+                        "color": "red"
+                      },
+                      "Query failed": {
+                        "text": "Query failed",
+                        "color": "orange"
+                      },
+                      "No issue reported": {
+                        "text": "No issue reported",
+                        "color": "green"
+                      },
+                      "No health samples": {
+                        "text": "No health samples",
+                        "color": "gray"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "CPU telemetry"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "Present": {
+                        "text": "Present",
+                        "color": "green"
+                      },
+                      "Missing": {
+                        "text": "Missing",
+                        "color": "red"
+                      },
+                      "Unknown": {
+                        "text": "Unknown",
+                        "color": "gray"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Maintenance"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "Active event": {
+                        "text": "Active event",
+                        "color": "orange"
+                      },
+                      "No active events": {
+                        "text": "No active events",
+                        "color": "green"
+                      },
+                      "Unknown": {
+                        "text": "Unknown",
+                        "color": "gray"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Instance OCID"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open instance in OCI Console",
+                    "url": "https://cloud.oracle.com/compute/instances/${__value.raw}?region=${__data.fields.Region}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "instance_name",
+                "health_status",
+                "cpu_telemetry",
+                "maintenance_status",
+                "region",
+                "compartment_path",
+                "shape",
+                "owner",
+                "environment",
+                "availability_domain",
+                "fault_domain",
+                "instance_id"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "instance_name": 0,
+              "health_status": 1,
+              "cpu_telemetry": 2,
+              "maintenance_status": 3,
+              "region": 4,
+              "compartment_path": 5,
+              "shape": 6,
+              "owner": 7,
+              "environment": 8,
+              "availability_domain": 9,
+              "fault_domain": 10,
+              "instance_id": 11
+            },
+            "renameByName": {
+              "instance_name": "Instance",
+              "health_status": "Health",
+              "cpu_telemetry": "CPU telemetry",
+              "maintenance_status": "Maintenance",
+              "region": "Region",
+              "compartment_path": "Compartment",
+              "shape": "Shape",
+              "owner": "Owner",
+              "environment": "Environment",
+              "availability_domain": "Availability domain",
+              "fault_domain": "Fault domain",
+              "instance_id": "Instance OCID"
+            }
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "enablePagination": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "Instance"
+          }
+        ],
+        "cellHeight": "sm",
+        "footer": {
+          "show": true,
+          "reducer": [
+            "count"
+          ],
+          "countRows": true,
+          "fields": ""
+        }
+      }
+    },
+    {
+      "id": 16,
+      "title": "Inventory rows without instance details",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Inventory counts minus detailed roster rows for the selected regions and compartments. Owner, environment and instance filters do not apply to this reconciliation. A positive value means some running instances cannot be listed; upgrade to the inventory-backed roster collector.",
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 12,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(((sum by (job, instance) (oci_compute_running_instances{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\"})) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds)))) - (count(((max by (job, instance, region, compartment_id, compartment_path, instance_id, instance_name, shape, owner, environment, availability_domain, fault_domain) ((oci_compute_inventory_instance_info{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\"} or on (job, instance, instance_id) oci_compute_inventory_instance_agent_cpu_samples_present{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\"} or on (job, instance, instance_id) max without (signal) (oci_compute_inventory_instance_health{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\"})) >= bool 0)) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds)))) or (0 * max(((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds)))))",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable",
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 17,
+      "title": "CPU readings older than 5 minutes",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "CPU source timestamps, not Prometheus scrape timestamps. A fresh inventory can still contain an older OCI sample. Requires the collector with CPU value export.",
+      "gridPos": {
+        "x": 12,
+        "y": 21,
+        "w": 12,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count((((time() - oci_compute_inventory_instance_cpu_sample_timestamp_seconds{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"}) > 300) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds)))) or (0 * count(((oci_compute_inventory_instance_cpu_sample_timestamp_seconds{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"}) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds)))))",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable",
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 21,
+      "title": "CPU utilization by running instance",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Latest observed one-minute maximum from OCI Compute Agent, searched over the last 15 minutes. Missing samples are absent, never zero-filled; use CPU telemetry in the roster. Requires a collector release with CPU value export.",
+      "gridPos": {
+        "x": 0,
+        "y": 25,
         "w": 24,
         "h": 9
       },
@@ -203,7 +1043,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(oci_compute_inventory_instance_health{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\"} > 0) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_success_timestamp_seconds))",
+          "expr": "((oci_compute_inventory_instance_cpu_utilization_percent{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"}) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds)))",
           "instant": true,
           "range": false,
           "format": "table"
@@ -211,7 +1051,154 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "noValue": "Unavailable",
+          "noValue": "Unknown",
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "CPU (%)"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 80
+                    },
+                    {
+                      "color": "red",
+                      "value": 90
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "gauge",
+                  "mode": "basic"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "instance_name",
+                "Value",
+                "region",
+                "compartment_path",
+                "shape",
+                "owner",
+                "environment",
+                "availability_domain",
+                "fault_domain",
+                "instance_id"
+              ]
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "instance_name": 0,
+              "Value": 1,
+              "region": 2,
+              "compartment_path": 3,
+              "shape": 4,
+              "owner": 5,
+              "environment": 6,
+              "availability_domain": 7,
+              "fault_domain": 8,
+              "instance_id": 9
+            },
+            "renameByName": {
+              "instance_name": "Instance",
+              "Value": "CPU (%)",
+              "region": "Region",
+              "compartment_path": "Compartment",
+              "shape": "Shape",
+              "owner": "Owner",
+              "environment": "Environment",
+              "availability_domain": "Availability domain",
+              "fault_domain": "Fault domain",
+              "instance_id": "Instance OCID"
+            }
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "enablePagination": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "Instance"
+          }
+        ]
+      }
+    },
+    {
+      "id": 22,
+      "title": "All reported instance health signals",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "All available health readings, including zero. Positive values indicate an issue. Missing or inapplicable health signals are not fabricated as healthy.",
+      "gridPos": {
+        "x": 0,
+        "y": 34,
+        "w": 24,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((oci_compute_inventory_instance_health{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"}) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds)))",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unknown",
           "custom": {
             "align": "auto",
             "cellOptions": {
@@ -256,51 +1243,89 @@
                 ]
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "OCI health value"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
           }
         ]
       },
       "transformations": [
         {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "instance_name",
+                "signal",
+                "Value",
+                "region",
+                "compartment_path",
+                "shape",
+                "owner",
+                "environment",
+                "availability_domain",
+                "fault_domain",
+                "instance_id"
+              ]
+            }
+          }
+        },
+        {
           "id": "organize",
           "options": {
-            "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "compartment_id": true,
-              "event_id": true,
-              "hard_deadline": true,
-              "instance": true,
-              "job": true,
-              "maintenance_action": true,
-              "maintenance_category": true,
-              "maintenance_state": true,
-              "window_start": true
-            },
+            "excludeByName": {},
             "indexByName": {
               "instance_name": 0,
-              "instance_id": 1,
-              "shape": 2,
+              "signal": 1,
+              "Value": 2,
               "region": 3,
               "compartment_path": 4,
-              "owner": 5,
-              "environment": 6,
-              "availability_domain": 7,
-              "fault_domain": 8,
-              "signal": 9,
-              "Value": 10
+              "shape": 5,
+              "owner": 6,
+              "environment": 7,
+              "availability_domain": 8,
+              "fault_domain": 9,
+              "instance_id": 10
             },
             "renameByName": {
               "instance_name": "Instance",
-              "instance_id": "Instance OCID",
-              "shape": "Shape",
+              "signal": "Signal",
+              "Value": "OCI health value",
               "region": "Region",
               "compartment_path": "Compartment",
+              "shape": "Shape",
               "owner": "Owner",
               "environment": "Environment",
               "availability_domain": "Availability domain",
               "fault_domain": "Fault domain",
-              "signal": "Signal",
-              "Value": "OCI value"
+              "instance_id": "Instance OCID"
             }
           }
         }
@@ -324,10 +1349,10 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Scheduled or active events for running instances. OCI action is the operation OCI plans to perform. A dash means OCI omitted that time.",
+      "description": "Scheduled or active events for running instances. OCI action is the operation OCI plans to perform. A dash means OCI omitted that time. Empty means no events only when collection is complete.",
       "gridPos": {
         "x": 0,
-        "y": 13,
+        "y": 44,
         "w": 24,
         "h": 9
       },
@@ -338,7 +1363,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(oci_compute_inventory_instance_maintenance_event{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\"}) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_success_timestamp_seconds))",
+          "expr": "((oci_compute_inventory_instance_maintenance_event{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"}) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds)))",
           "instant": true,
           "range": false,
           "format": "table"
@@ -346,7 +1371,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "noValue": "—",
+          "noValue": "\u2014",
           "custom": {
             "align": "auto",
             "cellOptions": {
@@ -419,102 +1444,6 @@
       }
     },
     {
-      "id": 5,
-      "title": "Instances missing Compute Agent CPU telemetry",
-      "type": "table",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "description": "A successful OCI query returned no Compute Agent CPU sample in the last 15 minutes. Use this list to review coverage for workloads that require the agent.",
-      "gridPos": {
-        "x": 0,
-        "y": 22,
-        "w": 24,
-        "h": 9
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "(oci_compute_inventory_instance_agent_cpu_samples_present{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\"} == 0) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_success_timestamp_seconds))",
-          "instant": true,
-          "range": false,
-          "format": "table"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "noValue": "—",
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "inspect": false
-          }
-        },
-        "overrides": []
-      },
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "Value": true,
-              "__name__": true,
-              "compartment_id": true,
-              "event_id": true,
-              "hard_deadline": true,
-              "instance": true,
-              "job": true,
-              "maintenance_action": true,
-              "maintenance_category": true,
-              "maintenance_state": true,
-              "signal": true,
-              "window_start": true
-            },
-            "indexByName": {
-              "instance_name": 0,
-              "instance_id": 1,
-              "shape": 2,
-              "region": 3,
-              "compartment_path": 4,
-              "owner": 5,
-              "environment": 6,
-              "availability_domain": 7,
-              "fault_domain": 8
-            },
-            "renameByName": {
-              "instance_name": "Instance",
-              "instance_id": "Instance OCID",
-              "shape": "Shape",
-              "region": "Region",
-              "compartment_path": "Compartment",
-              "owner": "Owner",
-              "environment": "Environment",
-              "availability_domain": "Availability domain",
-              "fault_domain": "Fault domain"
-            }
-          }
-        }
-      ],
-      "options": {
-        "showHeader": true,
-        "enablePagination": true,
-        "sortBy": [
-          {
-            "desc": false,
-            "displayName": "Instance"
-          }
-        ]
-      }
-    },
-    {
       "id": 6,
       "title": "Failed OCI source queries",
       "type": "table",
@@ -522,10 +1451,10 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "A failed or timed-out query leaves a visibility gap for the signal and compartment shown.",
+      "description": "A failed or timed-out query leaves a visibility gap for the signal and compartment shown. Region and compartment filters apply; these queries are shared across instances and ownership.",
       "gridPos": {
         "x": 0,
-        "y": 31,
+        "y": 53,
         "w": 24,
         "h": 7
       },
@@ -639,6 +1568,76 @@
             "displayName": "Region"
           }
         ]
+      }
+    },
+    {
+      "id": 23,
+      "title": "CPU utilization history",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Sampled latest OCI one-minute maxima at each collector refresh. These are not continuous one-minute scrapes. Gaps remain gaps; verify source age before alerting.",
+      "gridPos": {
+        "x": 0,
+        "y": 60,
+        "w": 24,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((oci_compute_inventory_instance_cpu_utilization_percent{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\",instance_id=~\"${compute_instance:regex}\",owner=~\"${owner:regex}\",environment=~\"${environment:regex}\"}) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds)))",
+          "instant": false,
+          "range": true,
+          "format": "time_series",
+          "legendFormat": "{{instance_name}} \u00b7 {{region}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "drawStyle": "line",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 30,
+      "title": "Alert rule examples and operating guidance",
+      "type": "text",
+      "gridPos": {
+        "x": 0,
+        "y": 69,
+        "w": 24,
+        "h": 24
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "### Create alerts for your workloads\n\nFilter the fleet, identify the instance OCID and owner, then create a Grafana alert rule against **Prometheus**. Use stable labels such as `instance_id`, `region`, and `compartment_path`; dashboard filters do not configure alert rules. Configure the contact point, routing labels, evaluation interval, pending period, and No Data / Error behavior.\n\nFor instance and source conditions below, append this freshness gate:\n```promql\nand on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)))\n```\n\nCreate separate alerts for stale/failed inventory and collector unavailability so missing data is visible. Example pending periods are illustrative and should match your service objectives.\n\n**Health issue** \u00b7 example pending: 5m\n```promql\noci_compute_inventory_instance_health > 0\n```\nRoute by region, compartment and instance_id. Review the signal label.\n\n**Missing CPU telemetry** \u00b7 example pending: 10m\n```promql\noci_compute_inventory_instance_agent_cpu_samples_present == 0\n```\nUse only for workloads where Compute Agent is expected.\n\n**High CPU, source sample younger than 5 minutes** \u00b7 example pending: 10m\n```promql\n(oci_compute_inventory_instance_cpu_utilization_percent > 90) and on (job, instance, instance_id) ((time() - oci_compute_inventory_instance_cpu_sample_timestamp_seconds) < 300)\n```\n90% is an example threshold. This is the latest one-minute maximum sampled each collection.\n\n**Disruptive maintenance due within 24 hours** \u00b7 example pending: 5m\n```promql\n(oci_compute_inventory_instance_maintenance_deadline_timestamp_seconds{maintenance_state=\"SCHEDULED\",maintenance_action=~\"REBOOT_MIGRATION|STOP|TERMINATE\"} - time()) < 86400\n```\nIncludes overdue deadlines; confirm the OCI action and owner.\n\n**Source query failure** \u00b7 example pending: 10m\n```promql\noci_compute_inventory_instance_signal_query_success == 0\n```\nA permissions, throttling or timeout failure creates a visibility gap.\n\n**Inventory collector unavailable** \u00b7 example pending: 5m\n```promql\nabsent(up{job=\"oci-compute-inventory\"}) or (up{job=\"oci-compute-inventory\"} == 0)\n```\nSet No Data and Error handling explicitly in Grafana.\n\n**Stale or failed inventory** \u00b7 example pending: 5m\n```promql\n(oci_compute_inventory_collection_success == 0) or ((time() - oci_compute_inventory_last_success_timestamp_seconds) > on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds))\n```\n\nQueries, units and labels are available in each panel\u2019s Inspect view. These examples do not create or enable any alerts."
       }
     }
   ],

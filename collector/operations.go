@@ -189,11 +189,15 @@ func renderOperations(b *strings.Builder, s snapshot) {
 	const querySuccess = "oci_compute_inventory_instance_signal_query_success"
 	const health = "oci_compute_inventory_instance_health"
 	const coverage = "oci_compute_inventory_instance_agent_cpu_samples_present"
+	const cpu = "oci_compute_inventory_instance_cpu_utilization_percent"
+	const cpuTime = "oci_compute_inventory_instance_cpu_sample_timestamp_seconds"
 	const eventInfo = "oci_compute_inventory_instance_maintenance_event"
 	const deadline = "oci_compute_inventory_instance_maintenance_deadline_timestamp_seconds"
 	gauge(querySuccess, "Whether the latest source query succeeded for a region and compartment with running instances.")
 	gauge(health, "Latest OCI health value in the last 15 minutes. Positive values indicate an issue.")
 	gauge(coverage, "Whether the instance reported an OCI Compute Agent CPU sample within the last 15 minutes.")
+	gauge(cpu, "Latest observed one-minute maximum OCI Compute Agent CPU utilization percent within the last 15 minutes.")
+	gauge(cpuTime, "OCI timestamp of the CPU utilization sample as Unix seconds.")
 	gauge(eventInfo, "Active OCI Compute maintenance event for a running instance.")
 	gauge(deadline, "OCI hard due date for the maintenance event, when supplied, as Unix seconds.")
 	for _, cell := range s.Operations.Locations {
@@ -222,6 +226,10 @@ func renderOperations(b *strings.Builder, s snapshot) {
 				sample, found := signal.Samples[id]
 				if signal.Signal == cpuSignal {
 					writeSample(coverage, labelsByID[id], float64(boolean(found)))
+					if found {
+						writeSample(cpu, labelsByID[id], sample.Value)
+						writeSample(cpuTime, labelsByID[id], float64(sample.At.Unix()))
+					}
 				} else if found && strings.HasPrefix(s.Instances[id].Shape, signal.Signal.ShapePrefix) {
 					writeSample(health, labelsByID[id]+signalLabel, sample.Value)
 				}

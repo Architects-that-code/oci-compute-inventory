@@ -49,8 +49,17 @@ Authenticate with GitHub CLI (`gh auth login`) using a token that has
 `GITHUB_TOKEN` with `packages: write` and `GITHUB_ACTOR`. Do not put tokens in
 Makefile arguments or source control.
 
-Recommended: run **Actions → Publish container → Run workflow** and enter the
-release version. The workflow tests and publishes both architectures with its
+Pushes to `main` automatically run `make build` (including race tests, vet, and
+dashboard validation), then publish a new image tagged `sha-<full-commit-SHA>`.
+Pull requests targeting `main` run the same build and tests. The publish job
+depends on successful build and test completion; failed checks prevent publishing.
+Images include both Linux AMD64 and ARM64. Re-running the same commit reuses its
+existing image tag. After successful publishing on `main`, the workflow also
+updates `ghcr.io/architects-that-code/oci-compute-inventory:latest` to the same
+multi-architecture image. Manual releases do not move `latest`.
+
+For a versioned release, run **Actions → Publish container → Run workflow** and
+enter a new release version. The workflow tests and publishes both architectures with its
 repository-scoped `GITHUB_TOKEN` and `packages: write`; no personal token is needed.
 Repository visibility does not grant package push permission. For local publishing
 with an existing GitHub CLI login, first run
@@ -179,3 +188,27 @@ The health series uses the latest returned OCI health point within the
 15-minute query window. The coverage series is emitted only when the CPU query
 succeeds. The maintenance deadline series is emitted when OCI supplies a hard
 due date.
+
+### Fleet operations dashboard and CPU values
+
+The operations dashboard lists running instances with health, telemetry and
+maintenance status, including healthy instances and instances with unknown
+signals. The independent `oci_compute_inventory_instance_info` gauge preserves
+all running inventory rows when monitoring sources fail. Filters cover region,
+compartment, owner, environment and instance OCID. Source diagnostics use region
+and compartment scope because each source query is shared by multiple instances.
+
+`oci_compute_inventory_instance_cpu_utilization_percent` exports the latest
+observed one-minute maximum returned by OCI Compute Agent within the 15-minute
+lookback. `oci_compute_inventory_instance_cpu_sample_timestamp_seconds` is its
+OCI source timestamp. Missing or failed CPU queries never emit a utilization
+value of zero; use the existing coverage and query-success gauges to distinguish
+missing telemetry from a query failure. Values are sampled at the collector
+refresh cadence, not continuously streamed one-minute data.
+
+Publish these changes with a new immutable release tag (`v0.1.0.2` for this
+revision). Dashboard examples cover health issues, telemetry gaps, high CPU,
+maintenance deadlines, source failures and collector availability. They do not
+create alert rules; operators must set routing, workload thresholds, pending
+periods and No Data / Error behavior. No new OCI API calls or IAM permissions
+are required by these additional exported gauges.

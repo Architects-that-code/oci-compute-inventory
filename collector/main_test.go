@@ -209,3 +209,22 @@ func TestConcurrentScrapeAndRefresh(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestInstanceRosterWithoutMonitoring(t *testing.T) {
+	api := fixture()
+	api.instances = func(_ context.Context, r, c, p string) ([]instance, string, error) {
+		if r == "iad" && c == "root" {
+			return []instance{{ID: "vm", State: "RUNNING", Name: "App VM", Owner: "ops"}, {ID: "off", State: "STOPPED"}}, "", nil
+		}
+		return nil, "", nil
+	}
+	s := collect(context.Background(), api, "root", 2)
+	output := render(s, 5*time.Minute)
+	if strings.Count(output, "oci_compute_inventory_instance_info{") != 1 || !strings.Contains(output, `instance_id="vm",instance_name="App VM"`) || strings.Contains(output, `instance_id="off"`) {
+		t.Fatal(output)
+	}
+	s.Success = false
+	if strings.Contains(render(s, 5*time.Minute), "oci_compute_inventory_instance_info{") {
+		t.Fatal("failed inventory must not publish a partial roster")
+	}
+}

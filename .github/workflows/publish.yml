@@ -1,6 +1,10 @@
 name: Publish container
 
 on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       version:
@@ -10,14 +14,29 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 concurrency:
-  group: publish-${{ inputs.version }}
+  group: publish-${{ github.event_name }}-${{ inputs.version || github.ref }}
   cancel-in-progress: false
 
 jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.1'
+          cache-dependency-path: collector/go.sum
+      - name: Build and test
+        run: make build
+
   publish:
+    needs: build-test
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,5 +52,22 @@ jobs:
           GITHUB_ACTOR: ${{ github.actor }}
           RELEASE_VERSION: ${{ inputs.version }}
         run: |
-          [[ "$RELEASE_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][a-zA-Z0-9.-]+)?$ ]] || { echo 'Use a release tag such as v0.1.0'; exit 1; }
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            [[ "$RELEASE_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][a-zA-Z0-9.-]+)?$ ]] || { echo 'Use a release tag such as v0.1.0'; exit 1; }
+          else
+            RELEASE_VERSION="sha-${GITHUB_SHA}"
+          fi
           make publish VERSION="$RELEASE_VERSION"
+      - name: Log in to GHCR for latest tag
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Tag successful main image as latest
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          docker buildx imagetools create \
+            --tag ghcr.io/architects-that-code/oci-compute-inventory:latest \
+            "ghcr.io/architects-that-code/oci-compute-inventory:sha-${GITHUB_SHA}"

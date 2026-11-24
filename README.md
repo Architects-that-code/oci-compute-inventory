@@ -1,9 +1,24 @@
 # OCI Compute inventory
 
 Standalone Go collector for running Compute instance counts across every READY
-subscribed OCI region and ACTIVE compartment, including the tenancy root.
-`dashboards/oci-global-compute-inventory.json` is a portable copy of the Grafana
-dashboard with region and compartment filters.
+subscribed OCI region and ACTIVE compartment, including the tenancy root. It can
+also collect instance health, Compute Agent coverage, and active maintenance.
+
+## Grafana dashboards
+
+Import the desired JSON files from `dashboards/` into Grafana with a Prometheus
+datasource UID of `prometheus`. The dashboards share region and compartment
+filters and link to one another.
+
+- `oci-global-compute-inventory.json` shows counts and scan status.
+- `oci-global-compute-inventory-map.json` adds a regional map. Its count queries
+  expect the scrape job `oci-compute-inventory`. For map markers, Prometheus also
+  needs one `oci_region_info` series of value 1 per region with `region`,
+  `latitude`, and `longitude` labels. The dashboard can also show `city`,
+  `region_key`, `display_name`, and `country_code`. Supply these series through
+  the Prometheus setup that provides your region metadata.
+- `oci-compute-instance-operations.json` shows health issues, active maintenance,
+  missing Compute Agent telemetry, and failed OCI source queries.
 
 ## Build and test
 
@@ -121,3 +136,46 @@ tenancy scope. Configure Prometheus to scrape `/metrics` on port 9108. Verify
 
 See [OCI SDK authentication](https://docs.oracle.com/en-us/iaas/Content/API/Concepts/sdk_authentication_methods.htm)
 and [Container Instances resource principal access](https://docs.oracle.com/en-us/iaas/tools/go/latest/containerinstances/index.html).
+
+## Instance operations
+
+Add `--instance-monitoring` to the collector arguments to enable the additional
+read-only queries. The flag also works with `--once`. In addition to the
+inventory permissions, grant the existing runtime identity `read metrics` and
+`inspect instance-maintenance-events` in the monitored scope. See
+[Monitoring permissions](https://docs.oracle.com/en-us/iaas/Content/Identity/Reference/monitoringpolicyreference.htm)
+and [Compute permissions](https://docs.oracle.com/en-us/iaas/Content/Identity/Reference/corepolicyreference.htm#permissions-required-for-each-api-operation).
+
+The collector queries OCI Monitoring in each region and compartment containing
+running instances, joins by instance OCID, and reads all maintenance event
+pages. Operations collection has its own `COLLECTION_TIMEOUT_SECONDS` budget
+after inventory collection and uses up to `COLLECTOR_WORKERS` workers. If a source
+query fails or reaches the 2,000-stream OCI response limit, the collector reports
+the affected source and location. Counts and successful operations results
+remain available.
+
+Instance rows carry instance name, shape, availability domain, and fault
+domain. The `owner` and `environment` labels come from the corresponding
+lowercase OCI free-form tags when present. Maintenance rows show the OCI action,
+window start and hard deadline as returned, with times displayed in UTC.
+The telemetry coverage check looks for `oci_computeagent.CpuUtilization` in the
+last 15 minutes. Evaluate telemetry gaps for workloads where that agent is
+expected to run.
+
+### Alert expressions
+
+Use these PromQL conditions with the same fresh inventory check as the operations
+dashboard. Route by workload ownership and choose a pending period appropriate
+for the polling interval and workload.
+
+| Condition | Expression |
+| --- | --- |
+| Latest observed health issue | `oci_compute_inventory_instance_health > 0` |
+| Missing Compute Agent CPU sample | `oci_compute_inventory_instance_agent_cpu_samples_present == 0` |
+| Scheduled disruptive maintenance due within 24 hours or overdue | `(oci_compute_inventory_instance_maintenance_deadline_timestamp_seconds{maintenance_state="SCHEDULED",maintenance_action=~"REBOOT_MIGRATION\|STOP\|TERMINATE"} - time()) < 86400` |
+| Failed or uncompleted source query | `oci_compute_inventory_instance_signal_query_success == 0` |
+
+The health series uses the latest returned OCI health point within the
+15-minute query window. The coverage series is emitted only when the CPU query
+succeeds. The maintenance deadline series is emitted when OCI supplies a hard
+due date.

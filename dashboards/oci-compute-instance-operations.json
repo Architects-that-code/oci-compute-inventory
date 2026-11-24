@@ -1,0 +1,663 @@
+{
+  "uid": "oci-compute-instance-operations",
+  "title": "OCI / Compute Instance Operations",
+  "schemaVersion": 41,
+  "version": 1,
+  "description": "Health issues, active maintenance, and missing Compute Agent CPU telemetry for running OCI Compute instances.",
+  "tags": [
+    "oci",
+    "compute",
+    "operations"
+  ],
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "region",
+        "label": "Region",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": "label_values(oci_compute_inventory_region_success, region)",
+        "definition": "label_values(oci_compute_inventory_region_success, region)",
+        "refresh": 2,
+        "sort": 1,
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all",
+          "selected": true
+        },
+        "options": []
+      },
+      {
+        "name": "compartment",
+        "label": "Compartment",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": "label_values(oci_compute_compartment_info, compartment_path)",
+        "definition": "label_values(oci_compute_compartment_info, compartment_path)",
+        "refresh": 2,
+        "sort": 1,
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all",
+          "selected": true
+        },
+        "options": []
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Instance monitoring",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Fleet-wide collection status. Partial includes a failed inventory scan or an unsuccessful monitoring query. Check snapshot age and the failed query table.",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(((oci_compute_inventory_instance_monitoring_enabled + on (job, instance) oci_compute_inventory_instance_monitoring_collection_success) or oci_compute_inventory_instance_monitoring_enabled) and on (job, instance) topk(1, oci_compute_inventory_last_attempt_timestamp_seconds))",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Disabled",
+                  "color": "gray"
+                },
+                "1": {
+                  "text": "Incomplete",
+                  "color": "orange"
+                },
+                "2": {
+                  "text": "Complete",
+                  "color": "green"
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Inventory snapshot age",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Instance rows are shown only for a successful inventory snapshot younger than three polling intervals.",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max((time() - oci_compute_inventory_last_success_timestamp_seconds) and (oci_compute_inventory_last_success_timestamp_seconds > 0) and on (job, instance) topk(1, oci_compute_inventory_last_success_timestamp_seconds))",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable",
+          "unit": "s",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "value",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Instance health issues",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Latest positive OCI health readings. Use the collector status and query failures to assess visibility.",
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 24,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(oci_compute_inventory_instance_health{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\"} > 0) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_success_timestamp_seconds))",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable",
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Signal"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "vm_infrastructure": {
+                        "text": "VM infrastructure"
+                      },
+                      "vm_accessibility": {
+                        "text": "VM accessibility"
+                      },
+                      "vm_filesystem": {
+                        "text": "VM filesystem"
+                      },
+                      "bare_metal_hardware": {
+                        "text": "Bare-metal hardware"
+                      },
+                      "agent_cpu": {
+                        "text": "Compute Agent CPU"
+                      },
+                      "maintenance": {
+                        "text": "Maintenance events"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "compartment_id": true,
+              "event_id": true,
+              "hard_deadline": true,
+              "instance": true,
+              "job": true,
+              "maintenance_action": true,
+              "maintenance_category": true,
+              "maintenance_state": true,
+              "window_start": true
+            },
+            "indexByName": {
+              "instance_name": 0,
+              "instance_id": 1,
+              "shape": 2,
+              "region": 3,
+              "compartment_path": 4,
+              "owner": 5,
+              "environment": 6,
+              "availability_domain": 7,
+              "fault_domain": 8,
+              "signal": 9,
+              "Value": 10
+            },
+            "renameByName": {
+              "instance_name": "Instance",
+              "instance_id": "Instance OCID",
+              "shape": "Shape",
+              "region": "Region",
+              "compartment_path": "Compartment",
+              "owner": "Owner",
+              "environment": "Environment",
+              "availability_domain": "Availability domain",
+              "fault_domain": "Fault domain",
+              "signal": "Signal",
+              "Value": "OCI value"
+            }
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "enablePagination": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "Instance"
+          }
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "title": "Active instance maintenance",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Scheduled or active events for running instances. OCI action is the operation OCI plans to perform. A dash means OCI omitted that time.",
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 24,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(oci_compute_inventory_instance_maintenance_event{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\"}) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_success_timestamp_seconds))",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "—",
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value": true,
+              "__name__": true,
+              "compartment_id": true,
+              "instance": true,
+              "job": true,
+              "signal": true
+            },
+            "indexByName": {
+              "window_start": 0,
+              "hard_deadline": 1,
+              "maintenance_state": 2,
+              "maintenance_action": 3,
+              "maintenance_category": 4,
+              "instance_name": 5,
+              "instance_id": 6,
+              "shape": 7,
+              "region": 8,
+              "compartment_path": 9,
+              "owner": 10,
+              "environment": 11,
+              "availability_domain": 12,
+              "fault_domain": 13,
+              "event_id": 14
+            },
+            "renameByName": {
+              "window_start": "Window start (UTC)",
+              "hard_deadline": "Hard deadline (UTC)",
+              "maintenance_state": "State",
+              "maintenance_action": "OCI action",
+              "maintenance_category": "Category",
+              "instance_name": "Instance",
+              "instance_id": "Instance OCID",
+              "shape": "Shape",
+              "region": "Region",
+              "compartment_path": "Compartment",
+              "owner": "Owner",
+              "environment": "Environment",
+              "availability_domain": "Availability domain",
+              "fault_domain": "Fault domain",
+              "event_id": "Event OCID"
+            }
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "enablePagination": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "Window start (UTC)"
+          }
+        ]
+      }
+    },
+    {
+      "id": 5,
+      "title": "Instances missing Compute Agent CPU telemetry",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "A successful OCI query returned no Compute Agent CPU sample in the last 15 minutes. Use this list to review coverage for workloads that require the agent.",
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 24,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(oci_compute_inventory_instance_agent_cpu_samples_present{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\"} == 0) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_success_timestamp_seconds))",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "—",
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value": true,
+              "__name__": true,
+              "compartment_id": true,
+              "event_id": true,
+              "hard_deadline": true,
+              "instance": true,
+              "job": true,
+              "maintenance_action": true,
+              "maintenance_category": true,
+              "maintenance_state": true,
+              "signal": true,
+              "window_start": true
+            },
+            "indexByName": {
+              "instance_name": 0,
+              "instance_id": 1,
+              "shape": 2,
+              "region": 3,
+              "compartment_path": 4,
+              "owner": 5,
+              "environment": 6,
+              "availability_domain": 7,
+              "fault_domain": 8
+            },
+            "renameByName": {
+              "instance_name": "Instance",
+              "instance_id": "Instance OCID",
+              "shape": "Shape",
+              "region": "Region",
+              "compartment_path": "Compartment",
+              "owner": "Owner",
+              "environment": "Environment",
+              "availability_domain": "Availability domain",
+              "fault_domain": "Fault domain"
+            }
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "enablePagination": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "Instance"
+          }
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "title": "Failed OCI source queries",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "A failed or timed-out query leaves a visibility gap for the signal and compartment shown.",
+      "gridPos": {
+        "x": 0,
+        "y": 31,
+        "w": 24,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(oci_compute_inventory_instance_signal_query_success{region=~\"${region:regex}\",compartment_path=~\"${compartment:regex}\"} == 0) and on (job, instance) ((oci_compute_inventory_collection_success == 1) and on (job, instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds) < on (job, instance) (3 * oci_compute_inventory_poll_interval_seconds)) and on (job, instance) topk(1, oci_compute_inventory_last_success_timestamp_seconds))",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Unavailable",
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Signal"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "vm_infrastructure": {
+                        "text": "VM infrastructure"
+                      },
+                      "vm_accessibility": {
+                        "text": "VM accessibility"
+                      },
+                      "vm_filesystem": {
+                        "text": "VM filesystem"
+                      },
+                      "bare_metal_hardware": {
+                        "text": "Bare-metal hardware"
+                      },
+                      "agent_cpu": {
+                        "text": "Compute Agent CPU"
+                      },
+                      "maintenance": {
+                        "text": "Maintenance events"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value": true,
+              "__name__": true,
+              "availability_domain": true,
+              "compartment_id": true,
+              "environment": true,
+              "event_id": true,
+              "fault_domain": true,
+              "hard_deadline": true,
+              "instance": true,
+              "instance_id": true,
+              "instance_name": true,
+              "job": true,
+              "maintenance_action": true,
+              "maintenance_category": true,
+              "maintenance_state": true,
+              "owner": true,
+              "shape": true,
+              "window_start": true
+            },
+            "indexByName": {
+              "region": 0,
+              "compartment_path": 1,
+              "signal": 2
+            },
+            "renameByName": {
+              "region": "Region",
+              "compartment_path": "Compartment",
+              "signal": "Signal"
+            }
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "enablePagination": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "Region"
+          }
+        ]
+      }
+    }
+  ],
+  "links": [
+    {
+      "title": "Inventory table",
+      "type": "link",
+      "url": "/d/oci-global-compute-inventory",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false
+    },
+    {
+      "title": "Map view",
+      "type": "link",
+      "url": "/d/oci-global-compute-inventory-map",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false
+    }
+  ]
+}

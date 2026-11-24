@@ -20,13 +20,21 @@ import (
 
 type region struct{ Name, Status string }
 type compartment struct{ ID, Name, Parent, State string }
-type instance struct{ ID, Compartment, State string }
+type instance struct {
+	ID, Compartment, State          string
+	Name, Shape, AvailabilityDomain string
+	FaultDomain, Owner, Environment string
+}
 type backend interface {
 	Regions(context.Context) ([]region, error)
 	Compartments(context.Context, string) ([]compartment, string, error)
 	Instances(context.Context, string, string, string) ([]instance, string, error)
 }
 type location struct{ Region, Compartment string }
+type runningInstance struct {
+	instance
+	Location location
+}
 type compartmentInfo struct{ Name, Path string }
 type snapshot struct {
 	Counts                   map[location]int
@@ -37,6 +45,8 @@ type snapshot struct {
 	LastAttempt, LastSuccess time.Time
 	Duration                 float64
 	Errors                   int
+	Instances                map[string]runningInstance
+	Operations               *operationsSnapshot
 }
 
 func pageLoop(visit func(string) (string, error)) error {
@@ -122,7 +132,7 @@ func collect(ctx context.Context, api backend, tenancy string, workers int) (s s
 	type job struct{ region, compartment string }
 	type result struct {
 		job
-		instances map[string]string
+		instances map[string]instance
 		err       error
 	}
 	jobs := make(chan job)
@@ -133,7 +143,7 @@ func collect(ctx context.Context, api backend, tenancy string, workers int) (s s
 		go func() {
 			defer wg.Done()
 			for j := range jobs {
-				found := map[string]string{}
+				found := map[string]instance{}
 				e := pageLoop(func(page string) (string, error) {
 					items, next, err := api.Instances(ctx, j.region, j.compartment, page)
 					if err != nil {
@@ -141,11 +151,10 @@ func collect(ctx context.Context, api backend, tenancy string, workers int) (s s
 					}
 					for _, in := range items {
 						if in.State == "RUNNING" {
-							c := in.Compartment
-							if c == "" {
-								c = j.compartment
+							if in.Compartment == "" {
+								in.Compartment = j.compartment
 							}
-							found[in.ID] = c
+							found[in.ID] = in
 						}
 					}
 					return next, nil
@@ -167,7 +176,7 @@ func collect(ctx context.Context, api backend, tenancy string, workers int) (s s
 		}
 	}()
 	go func() { wg.Wait(); close(results) }()
-	inventory := map[string]location{}
+	inventory := map[string]runningInstance{}
 	completed := map[string]int{}
 	failed := map[string]bool{}
 	for r := range results {
@@ -178,13 +187,13 @@ func collect(ctx context.Context, api backend, tenancy string, workers int) (s s
 			log.Printf("Inventory scan failed: region=%s compartment=%s error=%v", r.region, r.compartment, r.err)
 			continue
 		}
-		for id, c := range r.instances {
-			if _, ok := s.Compartments[c]; !ok {
+		for id, in := range r.instances {
+			if _, ok := s.Compartments[in.Compartment]; !ok {
 				s.Errors++
 				failed[r.region] = true
 				continue
 			}
-			inventory[id] = location{r.region, c}
+			inventory[id] = runningInstance{in, location{r.region, in.Compartment}}
 		}
 	}
 	if ctx.Err() != nil {
@@ -206,9 +215,10 @@ func collect(ctx context.Context, api backend, tenancy string, workers int) (s s
 				s.Counts[location{r, c}] = 0
 			}
 		}
-		for _, loc := range inventory {
-			s.Counts[loc]++
+		for _, in := range inventory {
+			s.Counts[in.Location]++
 		}
+		s.Instances = inventory
 		s.LastSuccess = time.Now()
 	}
 	return s
@@ -264,6 +274,7 @@ func render(s snapshot, interval time.Duration) string {
 			}
 		}
 	}
+	renderOperations(&b, s)
 	return b.String()
 }
 
@@ -310,6 +321,7 @@ func run() error {
 	mode := flag.String("auth", "workload", "Authentication: workload (OKE), instance (OCI Compute), resource (Container Instances), config (local --once only)")
 	configFile := flag.String("config-file", "", "Explicit local OCI configuration file; requires --auth config --once")
 	profile := flag.String("profile", "DEFAULT", "OCI configuration file profile (local validation only)")
+	monitorInstances := flag.Bool("instance-monitoring", false, "Collect OCI instance health, agent coverage, and maintenance")
 	flag.Parse()
 	options := authOptions{mode: *mode, configFile: *configFile, profile: *profile, once: *once}
 	if err := options.validate(); err != nil {
@@ -362,10 +374,16 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	period := time.Duration(interval) * time.Second
-	scan := func(api backend) snapshot {
+	scan := func(api *ociBackend) snapshot {
 		c, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
-		defer cancel()
-		return collect(c, api, tenancy, workers)
+		s := collect(c, api, tenancy, workers)
+		cancel()
+		if *monitorInstances {
+			c, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
+			defer cancel()
+			s.Operations = collectOperations(c, api, s, workers)
+		}
+		return s
 	}
 	if *once {
 		api, err := newOCIBackend(options, region, tenancy)
@@ -377,11 +395,17 @@ func run() error {
 		if !s.Success {
 			return errors.New("inventory incomplete")
 		}
+		if *monitorInstances && !s.Operations.Success {
+			return errors.New("instance monitoring incomplete")
+		}
 		return nil
 	}
 	st := &store{}
+	if *monitorInstances {
+		st.s.Operations = &operationsSnapshot{}
+	}
 	go func() {
-		var api backend
+		var api *ociBackend
 		for {
 			started := time.Now()
 			var err error
@@ -392,6 +416,9 @@ func run() error {
 			if err != nil {
 				log.Printf("Inventory authentication failed: %v", err)
 				s = snapshot{Errors: 1, LastAttempt: started, Duration: time.Since(started).Seconds()}
+				if *monitorInstances {
+					s.Operations = &operationsSnapshot{}
+				}
 			} else {
 				s = scan(api)
 			}

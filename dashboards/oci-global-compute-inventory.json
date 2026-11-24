@@ -2,7 +2,7 @@
   "uid": "oci-global-compute-inventory",
   "title": "OCI / Global Running Compute",
   "schemaVersion": 41,
-  "version": 1,
+  "version": 3,
   "description": "Tenancy-wide Compute API inventory, refreshed every five minutes after each completed scan. All READY subscribed regions and ACTIVE compartments (including the tenancy root) are paginated. RUNNING VMs and bare-metal instances count regardless of metrics-agent state. Scan results are observations made during a scan, not a transactional OCI snapshot. A failure suppresses all count series; freshness/coverage panels remain visible. Counts do not represent CPU, OCPU, DB services or container/pod counts.",
   "tags": [
     "oci",
@@ -120,13 +120,13 @@
     },
     {
       "id": 2,
-      "title": "Complete and fresh inventory",
+      "title": "Regions with running compute",
       "type": "stat",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "1 means every READY subscribed region and every ACTIVE compartment, including the tenancy root, was scanned successfully. No value means the snapshot is incomplete or stale.",
+      "description": "Active regions within the selected region and compartment filters, out of the full number of discovered subscribed regions. Both numbers come from the collector. Suppressed when inventory is stale or incomplete.",
       "gridPos": {
         "h": 7,
         "w": 12,
@@ -135,8 +135,12 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
-          "min": 0
+          "displayName": "${__field.labels.active_regions} of ${__field.labels.total_regions}",
+          "noValue": "Inventory unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
         },
         "overrides": []
       },
@@ -154,7 +158,11 @@
           ],
           "fields": "",
           "values": false
-        }
+        },
+        "textMode": "name",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center"
       },
       "targets": [
         {
@@ -163,7 +171,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(oci_compute_inventory_collection_success == 1) and (time() - oci_compute_inventory_last_success_timestamp_seconds < 3 * oci_compute_inventory_poll_interval_seconds)",
+          "expr": "count_values(\"active_regions\", ((count((sum by (region) ((oci_compute_running_instances{job=\"oci-compute-inventory\",region=~\"$region\",compartment_path=~\"$compartment\"} and on (job,instance) (((oci_compute_inventory_collection_success{job=\"oci-compute-inventory\"} == 1) and on (job,instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds{job=\"oci-compute-inventory\"}) < 3 * oci_compute_inventory_poll_interval_seconds{job=\"oci-compute-inventory\"})) and on (job,instance) topk(1,oci_compute_inventory_last_success_timestamp_seconds{job=\"oci-compute-inventory\"}))))) > 0) or vector(0)) and on () (max((((oci_compute_inventory_collection_success{job=\"oci-compute-inventory\"} == 1) and on (job,instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds{job=\"oci-compute-inventory\"}) < 3 * oci_compute_inventory_poll_interval_seconds{job=\"oci-compute-inventory\"})) and on (job,instance) topk(1,oci_compute_inventory_last_success_timestamp_seconds{job=\"oci-compute-inventory\"})))))) * on () group_left(total_regions) count_values(\"total_regions\", max(oci_compute_inventory_regions_expected{job=\"oci-compute-inventory\"} and on (job,instance) topk(1,oci_compute_inventory_last_success_timestamp_seconds{job=\"oci-compute-inventory\"})))",
           "legendFormat": "__auto",
           "instant": true,
           "range": false,
@@ -700,6 +708,24 @@
           "format": "time_series"
         }
       ]
+    }
+  ],
+  "links": [
+    {
+      "title": "Map view",
+      "type": "link",
+      "url": "/d/oci-global-compute-inventory-map",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false
+    },
+    {
+      "title": "Instance operations",
+      "type": "link",
+      "url": "/d/oci-compute-instance-operations",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false
     }
   ]
 }

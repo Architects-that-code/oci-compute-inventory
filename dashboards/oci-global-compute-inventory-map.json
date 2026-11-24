@@ -1,0 +1,1048 @@
+{
+  "uid": "oci-global-compute-inventory-map",
+  "title": "OCI / Global Running Compute Map",
+  "schemaVersion": 41,
+  "version": 8,
+  "description": "Tenancy-wide Compute API inventory, refreshed every five minutes after each completed scan. All READY subscribed regions and ACTIVE compartments (including the tenancy root) are paginated. RUNNING VMs and bare-metal instances count regardless of metrics-agent state. Scan results are observations made during a scan, not a transactional OCI snapshot. A failure suppresses all count series; freshness/coverage panels remain visible. Counts do not represent CPU, OCPU, DB services or container/pod counts.",
+  "tags": [
+    "oci",
+    "inventory",
+    "compute",
+    "global",
+    "terraform"
+  ],
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "region",
+        "label": "Region",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": "label_values(oci_compute_inventory_region_success, region)",
+        "definition": "label_values(oci_compute_inventory_region_success, region)",
+        "refresh": 2,
+        "sort": 1,
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all",
+          "selected": true
+        },
+        "options": []
+      },
+      {
+        "name": "compartment",
+        "label": "Compartment",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "query": "label_values(oci_compute_compartment_info, compartment_path)",
+        "definition": "label_values(oci_compute_compartment_info, compartment_path)",
+        "refresh": 2,
+        "sort": 1,
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": {
+          "text": "All",
+          "value": "$__all",
+          "selected": true
+        },
+        "options": []
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 21,
+      "type": "text",
+      "title": "Global running compute",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Filter by **region** and **compartment**. **Blue numbered markers: active regions \u00b7 Small gray markers without numbers: zero running instances \u00b7 Amber triangles: inventory unavailable.** Counts require a complete, fresh inventory. Hover for region details or click to open the regional table. Coordinates are approximate; colocated regions overlap."
+      }
+    },
+    {
+      "id": 1,
+      "title": "Running Compute instances",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Compute API lifecycle_state=RUNNING. Includes VM, bare metal, managed OKE and Karpenter workers across the entire tenancy. Filters apply. Counts are hidden if a scan is incomplete or older than three configured poll intervals. No telemetry-emitting-agent requirement.",
+      "gridPos": {
+        "h": 4,
+        "w": 12,
+        "x": 0,
+        "y": 3
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum((oci_compute_running_instances{job=\"oci-compute-inventory\",region=~\"$region\",compartment_path=~\"$compartment\"} and on (job,instance) (((oci_compute_inventory_collection_success{job=\"oci-compute-inventory\"} == 1) and on (job,instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds{job=\"oci-compute-inventory\"}) < 3 * oci_compute_inventory_poll_interval_seconds{job=\"oci-compute-inventory\"})) and on (job,instance) topk(1,oci_compute_inventory_last_success_timestamp_seconds{job=\"oci-compute-inventory\"}))))",
+          "legendFormat": "__auto",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Regions with running compute",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Active regions within the selected region and compartment filters, out of the full number of discovered subscribed regions. Both numbers come from the collector. Suppressed when inventory is stale or incomplete.",
+      "gridPos": {
+        "h": 4,
+        "w": 12,
+        "x": 12,
+        "y": 3
+      },
+      "fieldConfig": {
+        "defaults": {
+          "displayName": "${__field.labels.active_regions} of ${__field.labels.total_regions}",
+          "noValue": "Inventory unavailable",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "name",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "count_values(\"active_regions\", ((count((sum by (region) ((oci_compute_running_instances{job=\"oci-compute-inventory\",region=~\"$region\",compartment_path=~\"$compartment\"} and on (job,instance) (((oci_compute_inventory_collection_success{job=\"oci-compute-inventory\"} == 1) and on (job,instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds{job=\"oci-compute-inventory\"}) < 3 * oci_compute_inventory_poll_interval_seconds{job=\"oci-compute-inventory\"})) and on (job,instance) topk(1,oci_compute_inventory_last_success_timestamp_seconds{job=\"oci-compute-inventory\"}))))) > 0) or vector(0)) and on () (max((((oci_compute_inventory_collection_success{job=\"oci-compute-inventory\"} == 1) and on (job,instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds{job=\"oci-compute-inventory\"}) < 3 * oci_compute_inventory_poll_interval_seconds{job=\"oci-compute-inventory\"})) and on (job,instance) topk(1,oci_compute_inventory_last_success_timestamp_seconds{job=\"oci-compute-inventory\"})))))) * on () group_left(total_regions) count_values(\"total_regions\", max(oci_compute_inventory_regions_expected{job=\"oci-compute-inventory\"} and on (job,instance) topk(1,oci_compute_inventory_last_success_timestamp_seconds{job=\"oci-compute-inventory\"})))",
+          "legendFormat": "__auto",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "title": "Running compute around the world",
+      "type": "geomap",
+      "pluginVersion": "12.2.1",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 24,
+        "h": 17
+      },
+      "description": "Blue markers with centered numbers are active regions; marker size represents the running count. Small gray markers mean an explicitly reported zero and have no number. Amber triangles mean stale, failed or unmatched inventory, never zero. Counts use the newest complete fresh inventory and the selected compartments. Region names are available on hover; coordinates are hidden. Coordinates are approximate city reference points (GeoNames CC BY 4.0, https://www.geonames.org/); colocated regions overlap.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(((sum by (region) ((oci_compute_running_instances{job=\"oci-compute-inventory\",region=~\"$region\",compartment_path=~\"$compartment\"} and on (job,instance) (((oci_compute_inventory_collection_success{job=\"oci-compute-inventory\"} == 1) and on (job,instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds{job=\"oci-compute-inventory\"}) < 3 * oci_compute_inventory_poll_interval_seconds{job=\"oci-compute-inventory\"})) and on (job,instance) topk(1,oci_compute_inventory_last_success_timestamp_seconds{job=\"oci-compute-inventory\"})))) or ((0 * max by (region) (oci_region_info{region=~\"$region\"})) - 1)) * on (region) group_left(latitude,longitude,city,region_key,display_name,country_code) oci_region_info{region=~\"$region\"})) > 0",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "editorMode": "code",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "(((sum by (region) ((oci_compute_running_instances{job=\"oci-compute-inventory\",region=~\"$region\",compartment_path=~\"$compartment\"} and on (job,instance) (((oci_compute_inventory_collection_success{job=\"oci-compute-inventory\"} == 1) and on (job,instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds{job=\"oci-compute-inventory\"}) < 3 * oci_compute_inventory_poll_interval_seconds{job=\"oci-compute-inventory\"})) and on (job,instance) topk(1,oci_compute_inventory_last_success_timestamp_seconds{job=\"oci-compute-inventory\"})))) or ((0 * max by (region) (oci_region_info{region=~\"$region\"})) - 1)) * on (region) group_left(latitude,longitude,city,region_key,display_name,country_code) oci_region_info{region=~\"$region\"})) == 0",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "editorMode": "code",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "refId": "C",
+          "expr": "(((sum by (region) ((oci_compute_running_instances{job=\"oci-compute-inventory\",region=~\"$region\",compartment_path=~\"$compartment\"} and on (job,instance) (((oci_compute_inventory_collection_success{job=\"oci-compute-inventory\"} == 1) and on (job,instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds{job=\"oci-compute-inventory\"}) < 3 * oci_compute_inventory_poll_interval_seconds{job=\"oci-compute-inventory\"})) and on (job,instance) topk(1,oci_compute_inventory_last_success_timestamp_seconds{job=\"oci-compute-inventory\"})))) or ((0 * max by (region) (oci_region_info{region=~\"$region\"})) - 1)) * on (region) group_left(latitude,longitude,city,region_key,display_name,country_code) oci_region_info{region=~\"$region\"})) < 0",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "editorMode": "code",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "min": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "dark-blue"
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "-1": {
+                  "text": "Inventory unavailable",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "noValue": "Inventory unavailable"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^Value.*$"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Inspect regional counts",
+                    "url": "/d/oci-global-compute-inventory?var-region=${__data.fields.region}&${compartment:queryparam}",
+                    "targetBlank": false
+                  }
+                ]
+              },
+              {
+                "id": "displayName",
+                "value": "Running instances"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^(latitude|longitude)$"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "tooltip": true,
+                  "viz": false,
+                  "legend": false
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "convertFieldType",
+          "options": {
+            "conversions": [
+              {
+                "targetField": "latitude",
+                "destinationType": "number"
+              },
+              {
+                "targetField": "longitude",
+                "destinationType": "number"
+              }
+            ]
+          }
+        }
+      ],
+      "options": {
+        "basemap": {
+          "name": "OpenStreetMap",
+          "type": "osm-standard",
+          "config": {}
+        },
+        "controls": {
+          "mouseWheelZoom": true,
+          "showZoom": true,
+          "showAttribution": true,
+          "showScale": true
+        },
+        "view": {
+          "id": "coords",
+          "lat": 18,
+          "lon": 10,
+          "zoom": 1.3,
+          "allLayers": true,
+          "noRepeat": true
+        },
+        "tooltip": {
+          "mode": "details"
+        },
+        "layers": [
+          {
+            "type": "markers",
+            "name": "Inactive regions (zero)",
+            "location": {
+              "mode": "coords",
+              "latitude": "latitude",
+              "longitude": "longitude"
+            },
+            "tooltip": true,
+            "config": {
+              "showLegend": false,
+              "style": {
+                "color": {
+                  "fixed": "gray"
+                },
+                "size": {
+                  "fixed": 8,
+                  "min": 8,
+                  "max": 8
+                },
+                "opacity": 0.65,
+                "symbol": {
+                  "mode": "fixed",
+                  "fixed": "img/icons/marker/circle.svg"
+                }
+              }
+            },
+            "filterData": {
+              "id": "byRefId",
+              "options": "B"
+            }
+          },
+          {
+            "type": "markers",
+            "name": "Inventory unavailable",
+            "location": {
+              "mode": "coords",
+              "latitude": "latitude",
+              "longitude": "longitude"
+            },
+            "tooltip": true,
+            "config": {
+              "showLegend": false,
+              "style": {
+                "color": {
+                  "fixed": "orange"
+                },
+                "size": {
+                  "fixed": 12,
+                  "min": 12,
+                  "max": 12
+                },
+                "opacity": 0.9,
+                "symbol": {
+                  "mode": "fixed",
+                  "fixed": "img/icons/marker/triangle.svg"
+                }
+              }
+            },
+            "filterData": {
+              "id": "byRefId",
+              "options": "C"
+            }
+          },
+          {
+            "type": "markers",
+            "name": "Active regions",
+            "location": {
+              "mode": "coords",
+              "latitude": "latitude",
+              "longitude": "longitude"
+            },
+            "tooltip": true,
+            "config": {
+              "showLegend": false,
+              "style": {
+                "color": {
+                  "fixed": "dark-blue"
+                },
+                "size": {
+                  "field": "Running instances",
+                  "fixed": 10,
+                  "min": 26,
+                  "max": 48
+                },
+                "opacity": 0.85,
+                "symbol": {
+                  "mode": "fixed",
+                  "fixed": "img/icons/marker/circle.svg"
+                }
+              }
+            },
+            "filterData": {
+              "id": "byRefId",
+              "options": "A"
+            }
+          },
+          {
+            "type": "markers",
+            "name": "Running count",
+            "location": {
+              "mode": "coords",
+              "latitude": "latitude",
+              "longitude": "longitude"
+            },
+            "tooltip": false,
+            "config": {
+              "showLegend": false,
+              "style": {
+                "color": {
+                  "fixed": "#FFFFFF"
+                },
+                "size": {
+                  "fixed": 26,
+                  "min": 26,
+                  "max": 26
+                },
+                "opacity": 0,
+                "symbol": {
+                  "mode": "fixed",
+                  "fixed": "img/icons/marker/circle.svg"
+                },
+                "text": {
+                  "mode": "field",
+                  "field": "Running instances",
+                  "fixed": ""
+                },
+                "textConfig": {
+                  "fontSize": 12,
+                  "offsetX": 0,
+                  "offsetY": 0,
+                  "textAlign": "center",
+                  "textBaseline": "middle"
+                }
+              }
+            },
+            "filterData": {
+              "id": "byRefId",
+              "options": "A"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "title": "Inventory collection success",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "0 means counts must not be trusted; 1 means the last whole-tenancy attempt succeeded. Independent of selected filters.",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "oci_compute_inventory_collection_success",
+          "legendFormat": "__auto",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Snapshot age",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(time() - oci_compute_inventory_last_success_timestamp_seconds) and (oci_compute_inventory_last_success_timestamp_seconds > 0)",
+          "legendFormat": "__auto",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Running instances by region",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 31
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (region) ((oci_compute_running_instances{job=\"oci-compute-inventory\",region=~\"$region\",compartment_path=~\"$compartment\"} and on (job,instance) (((oci_compute_inventory_collection_success{job=\"oci-compute-inventory\"} == 1) and on (job,instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds{job=\"oci-compute-inventory\"}) < 3 * oci_compute_inventory_poll_interval_seconds{job=\"oci-compute-inventory\"})) and on (job,instance) topk(1,oci_compute_inventory_last_success_timestamp_seconds{job=\"oci-compute-inventory\"}))))",
+          "legendFormat": "__auto",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Running instances by compartment",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 31
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (compartment_path) ((oci_compute_running_instances{job=\"oci-compute-inventory\",region=~\"$region\",compartment_path=~\"$compartment\"} and on (job,instance) (((oci_compute_inventory_collection_success{job=\"oci-compute-inventory\"} == 1) and on (job,instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds{job=\"oci-compute-inventory\"}) < 3 * oci_compute_inventory_poll_interval_seconds{job=\"oci-compute-inventory\"})) and on (job,instance) topk(1,oci_compute_inventory_last_success_timestamp_seconds{job=\"oci-compute-inventory\"}))))",
+          "legendFormat": "__auto",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Running instance counts",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 38
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (region,compartment_path) ((oci_compute_running_instances{job=\"oci-compute-inventory\",region=~\"$region\",compartment_path=~\"$compartment\"} and on (job,instance) (((oci_compute_inventory_collection_success{job=\"oci-compute-inventory\"} == 1) and on (job,instance) ((time() - oci_compute_inventory_last_success_timestamp_seconds{job=\"oci-compute-inventory\"}) < 3 * oci_compute_inventory_poll_interval_seconds{job=\"oci-compute-inventory\"})) and on (job,instance) topk(1,oci_compute_inventory_last_success_timestamp_seconds{job=\"oci-compute-inventory\"}))))",
+          "legendFormat": "__auto",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Regional collection coverage",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "All-region collection status, independent of filters. 0 means at least one compartment scan failed in that region.",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 38
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "oci_compute_inventory_region_success",
+          "legendFormat": "__auto",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Regions discovered",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Number of READY subscribed OCI regions, including regions with zero running instances.",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 45
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "oci_compute_inventory_regions_expected",
+          "legendFormat": "__auto",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Compartments discovered",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Tenancy root plus every ACTIVE descendant compartment. Names are represented as paths to distinguish duplicates.",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 45
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "oci_compute_inventory_compartments_expected",
+          "legendFormat": "__auto",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Collection duration",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 52
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "oci_compute_inventory_collection_duration_seconds",
+          "legendFormat": "__auto",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Region/compartment scan errors",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "",
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 52
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "oci_compute_inventory_collection_errors",
+          "legendFormat": "__auto",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ]
+    }
+  ],
+  "links": [
+    {
+      "title": "Table view",
+      "type": "link",
+      "url": "/d/oci-global-compute-inventory",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false
+    },
+    {
+      "title": "Instance operations",
+      "type": "link",
+      "url": "/d/oci-compute-instance-operations",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false
+    }
+  ]
+}

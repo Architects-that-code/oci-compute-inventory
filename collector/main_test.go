@@ -54,12 +54,12 @@ func TestCompleteScanPaginationAndStates(t *testing.T) {
 		mu.Unlock()
 		if r == "iad" && c == "root" {
 			if p == "next" {
-				return []instance{{"vm", "root", "RUNNING"}, {"baremetal", "root", "RUNNING"}}, "", nil
+				return []instance{{ID: "vm", Compartment: "root", State: "RUNNING"}, {ID: "baremetal", Compartment: "root", State: "RUNNING"}}, "", nil
 			}
-			return []instance{{"vm", "root", "RUNNING"}, {"stopped", "root", "STOPPED"}}, "next", nil
+			return []instance{{ID: "vm", Compartment: "root", State: "RUNNING"}, {ID: "stopped", Compartment: "root", State: "STOPPED"}}, "next", nil
 		}
 		if r == "lhr" && c == "child" {
-			return []instance{{"nested-vm", "child", "RUNNING"}}, "", nil
+			return []instance{{ID: "nested-vm", Compartment: "child", State: "RUNNING"}}, "", nil
 		}
 		return nil, "", nil
 	}
@@ -78,7 +78,7 @@ func TestCompartmentMovesDeduplicated(t *testing.T) {
 	api := fixture()
 	api.instances = func(_ context.Context, r, c, p string) ([]instance, string, error) {
 		if r == "iad" && c != "child" {
-			return []instance{{"moving", "project", "RUNNING"}}, "", nil
+			return []instance{{ID: "moving", Compartment: "project", State: "RUNNING"}}, "", nil
 		}
 		return nil, "", nil
 	}
@@ -93,7 +93,7 @@ func TestFailureHidesPartialCounts(t *testing.T) {
 		if r == "lhr" {
 			return nil, "", errors.New("not authorized")
 		}
-		return []instance{{"vm", "root", "RUNNING"}}, "", nil
+		return []instance{{ID: "vm", Compartment: "root", State: "RUNNING"}}, "", nil
 	}
 	s := collect(context.Background(), api, "root", 2)
 	text := render(s, 300*time.Second)
@@ -154,7 +154,7 @@ func TestCanceledScanFailsClosed(t *testing.T) {
 func TestNewCompartmentDuringScanFailsClosed(t *testing.T) {
 	api := fixture()
 	api.instances = func(context.Context, string, string, string) ([]instance, string, error) {
-		return []instance{{"new", "unknown", "RUNNING"}}, "", nil
+		return []instance{{ID: "new", Compartment: "unknown", State: "RUNNING"}}, "", nil
 	}
 	s := collect(context.Background(), api, "root", 2)
 	if s.Success || s.Errors != 6 || s.Counts != nil {
